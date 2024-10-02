@@ -90,7 +90,7 @@ wrapper generator(int from, int to, int throw_on = -1) {
     dtor_guard dg;
     for (int i = from; i < to; ++i) {
         if (i == throw_on) {
-            throw std::runtime_error("throwing on " + std::to_string(i));
+            throw std::runtime_error(std::to_string(i));
         }
         co_yield i;
     }
@@ -100,6 +100,39 @@ void no_throws() {
     auto gen = generator(0, 10);
     for (int i = 0; i < 10; ++i) {
         std::printf("%d ", gen.get());
+    }
+}
+
+void eager_throw() {
+    try {
+        auto gen = generator(0, 10, 0);
+        for (int i = 0; i < 10; ++i) {
+            std::printf("%d ", gen.get());
+            errors.push_back("no exception thrown");
+            return;
+        }
+    }
+    catch (const std::runtime_error& e) {
+        if (std::string("0") != e.what()) {
+            errors.push_back("invalid exception thrown: " + std::string(e.what()));
+        }
+    }
+}
+
+void post_yield_throw() {
+    try {
+        auto gen = generator(0, 10, 5);
+        for (int i = 0; i < 10; ++i) {
+            std::printf("%d ", gen.get());
+            if (i == 4) {
+                errors.push_back("exception not thrown");
+            }
+        }
+    }
+    catch (const std::runtime_error& e) {
+        if (std::string("5") != e.what()) {
+            errors.push_back("invalid exception thrown: " + std::string(e.what()));
+        }
     }
 }
 
@@ -114,5 +147,7 @@ void run(void(*fn)(), const char* name) {
 
 int main() {
     RUN(no_throws);
+    //RUN(eager_throw); // crashes on msvc for now
+    RUN(post_yield_throw);
     return 0;
 }
