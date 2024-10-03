@@ -24,7 +24,7 @@ struct dtor_guard {
         --living;
     }
     static void reset() {
-        if (living != 0) {
+        if (living > 0) {
             errors.push_back("coro vars not destroyed");
         }
         living = 0;
@@ -89,7 +89,7 @@ struct error_guard {
         }
 
         for (const auto& err : errors) {
-            std::printf("    %s\n", err.c_str());
+            std::printf("    ERROR: %s\n", err.c_str());
         }
 
         std::puts("    FAIL");
@@ -107,6 +107,9 @@ struct track_alloc {
 };
 
 // this is what we should expect to work on all compilers all of the time
+// as of this writing it only works on:
+// * gcc trunk (with latest stable 14.2
+// * clang 17 and later
 struct simple_wrapper {
     struct promise_type : public track_alloc {
         int last_yield = no_value;
@@ -147,6 +150,51 @@ struct simple_wrapper {
         return ret;
     }
 };
+
+// this is our attempt at having something work, dealing with specific compiler quirks
+struct workaround_wrapper {
+    struct promise_type : public track_alloc {
+        int last_yield = no_value;
+        bool thrown = false;
+
+        workaround_wrapper get_return_object() {
+            return workaround_wrapper{ std::coroutine_handle<promise_type>::from_promise(*this) };
+        }
+
+        std::suspend_never initial_suspend() noexcept { return {}; } // eager
+        std::suspend_always final_suspend() noexcept { return {}; } // preserve the final yield
+
+        std::suspend_always yield_value(int v) noexcept {
+            last_yield = v;
+            return {};
+        }
+
+        void return_void() noexcept {}
+
+        void unhandled_exception() {
+            thrown = true;
+            throw;
+        }
+    };
+
+    std::coroutine_handle<promise_type> handle = nullptr;
+
+    explicit workaround_wrapper(std::coroutine_handle<promise_type> h = nullptr) noexcept : handle(h) {}
+    ~workaround_wrapper() noexcept {
+        if (handle && !handle.promise().thrown) {
+            handle.destroy();
+        }
+    }
+
+    int get() {
+        if (!handle) return no_handle;
+        if (handle.done()) return handle_done;
+        auto ret = handle.promise().last_yield;
+        handle.resume();
+        return ret;
+    }
+};
+
 
 template <typename W>
 W generator(int from, int to, int throw_on = -1) {
@@ -220,5 +268,6 @@ void run_all() {
 
 int main() {
     run_all<simple_wrapper>();
+    run_all<workaround_wrapper>();
     return 0;
 }
