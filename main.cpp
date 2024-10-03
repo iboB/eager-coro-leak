@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <vector>
 #include <string>
+#include <new>
 
 enum invalid_values : int {
     no_value = -1,
@@ -21,17 +22,62 @@ struct dtor_guard {
         }
         --living;
     }
+    static void reset() {
+        if (living != 0) {
+            errors.push_back("coro vars not destroyed");
+        }
+        living = 0;
+    }
 };
 int dtor_guard::living = 0;
+
+struct allocator {
+    static void* state_buf;
+    static bool allocated;
+
+    static void* allocate(std::size_t size) {
+        auto ret = std::malloc(size);
+        if (state_buf) {
+            errors.push_back("double state buf allocation");
+        }
+        else {
+            state_buf = ret;
+            allocated = true;
+        }
+        return ret;
+    };
+
+    static void deallocate(void* ptr) {
+        if (ptr != state_buf) {
+            errors.push_back("free unknown memory");
+        }
+        else if (!allocated) {
+            errors.push_back("double free of state buf");
+        }
+        allocated = false;
+    }
+
+    static void reset() {
+        if (allocated) {
+            errors.push_back("state buf leak");
+        }
+
+        std::free(state_buf);
+        state_buf = nullptr;
+        allocated = false;
+    }
+};
+
+void* allocator::state_buf = nullptr;
+bool allocator::allocated = false;
 
 struct error_guard {
     error_guard() {
         errors.clear();
     }
     ~error_guard() {
-        if (dtor_guard::living != 0) {
-            errors.push_back("coro vars not destroyed");
-        }
+        dtor_guard::reset();
+        allocator::reset();
 
         if (errors.empty()) {
             std::puts("  PASS");
@@ -41,6 +87,7 @@ struct error_guard {
         for (const auto& err : errors) {
             std::printf("  %s\n", err.c_str());
         }
+
         std::puts("  FAIL");
     }
 };
@@ -65,6 +112,14 @@ struct wrapper {
 
         void unhandled_exception() {
             throw;
+        }
+
+        void* operator new(std::size_t size) {
+            return allocator::allocate(size);
+        }
+
+        void operator delete(void* ptr) {
+            allocator::deallocate(ptr);
         }
     };
 
@@ -138,7 +193,7 @@ void post_yield_throw() {
 
 void run(void(*fn)(), const char* name) {
     error_guard eg;
-    std::printf("%s:\n  ", name);
+    std::printf("%s:\n  Output: ", name);
     fn();
     std::puts("");
 }
@@ -147,7 +202,7 @@ void run(void(*fn)(), const char* name) {
 
 int main() {
     RUN(no_throws);
-    //RUN(eager_throw); // crashes on msvc for now
+    RUN(eager_throw);
     RUN(post_yield_throw);
     return 0;
 }
