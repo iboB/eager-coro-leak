@@ -16,7 +16,7 @@ Unfortunately not all widely used compiles implement this. More importantly howe
 
 What's worse is that compilers that are in wide use have an absolutely crazy (though techincally conforming) variety of how they deal with coroutine exceptions and the lifetime of the corotune state buffer.
 
-It should be noted that gcc trunk (as of this writing the latest stable is 14.2) and clang 17 and above, have some up with their own resolution of freeing the state buffer. Thus on these compilers the "ideal" solution works.
+It should be noted that gcc trunk (as of this writing the latest stable is 14.2) and clang 17 and above, have come up with their own resolution of freeing the state buffer and they don't leak it. Thus on these compilers the "ideal" solution works as desired.
 
 Unfortunately most of the world is not on the latest compilers (especially not on bleeding edge unstable gcc). With Apple's speed of adoption, by the time Apple clang reaches 17, humanity will have colonized Mars.
 
