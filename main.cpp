@@ -108,7 +108,7 @@ struct track_alloc {
 
 // this is what we should expect to work on all compilers all of the time
 // as of this writing it only works on:
-// * gcc trunk (with latest stable 14.2
+// * gcc trunk (latest stable is 14.2)
 // * clang 17 and later
 struct simple_wrapper {
     struct promise_type : public track_alloc {
@@ -219,11 +219,7 @@ template <typename W>
 void eager_throw() {
     try {
         auto gen = generator<W>(0, 10, 0);
-        for (int i = 0; i < 10; ++i) {
-            std::printf("%d ", gen.get());
-            errors.push_back("no exception thrown");
-            return;
-        }
+        errors.push_back("no exception thrown");
     }
     catch (const std::runtime_error& e) {
         if (std::string("0") != e.what()) {
