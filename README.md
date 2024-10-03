@@ -20,7 +20,7 @@ It should be noted that gcc trunk (as of this writing the latest stable is 14.2)
 
 Unfortunately most of the world is not on the latest compilers (especially not on bleeding edge unstable gcc). With Apple's speed of adoption, by the time Apple clang reaches 17, humanity will have colonized Mars.
 
-So... until then what can we do with eager coroutines that throw before suspending? I'll use this repo to try find a practical solution which works on popular compilers.
+So... until then what can we do with eager coroutines that throw before suspending? I'll use this repo to try to find a practical solution which works on popular compilers.
 
 The task is: 
 
