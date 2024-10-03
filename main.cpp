@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <new>
+#include <typeinfo>
 
 enum invalid_values : int {
     no_value = -1,
@@ -61,6 +62,9 @@ struct allocator {
         if (allocated) {
             errors.push_back("state buf leak");
         }
+        if (!state_buf) {
+            errors.push_back("state buf allocation was elided (optimized out). Test is unreliable");
+        }
 
         std::free(state_buf);
         state_buf = nullptr;
@@ -80,24 +84,35 @@ struct error_guard {
         allocator::reset();
 
         if (errors.empty()) {
-            std::puts("  PASS");
+            std::puts("    PASS");
             return;
         }
 
         for (const auto& err : errors) {
-            std::printf("  %s\n", err.c_str());
+            std::printf("    %s\n", err.c_str());
         }
 
-        std::puts("  FAIL");
+        std::puts("    FAIL");
     }
 };
 
-struct wrapper {
-    struct promise_type {
+struct track_alloc {
+    void* operator new(std::size_t size) {
+        return allocator::allocate(size);
+    }
+
+    void operator delete(void* ptr) {
+        allocator::deallocate(ptr);
+    }
+};
+
+// this is what we should expect to work on all compilers all of the time
+struct simple_wrapper {
+    struct promise_type : public track_alloc {
         int last_yield = no_value;
 
-        wrapper get_return_object() {
-            return wrapper{std::coroutine_handle<promise_type>::from_promise(*this)};
+        simple_wrapper get_return_object() {
+            return simple_wrapper{ std::coroutine_handle<promise_type>::from_promise(*this) };
         }
 
         std::suspend_never initial_suspend() noexcept { return {}; } // eager
@@ -113,20 +128,12 @@ struct wrapper {
         void unhandled_exception() {
             throw;
         }
-
-        void* operator new(std::size_t size) {
-            return allocator::allocate(size);
-        }
-
-        void operator delete(void* ptr) {
-            allocator::deallocate(ptr);
-        }
     };
 
     std::coroutine_handle<promise_type> handle = nullptr;
 
-    explicit wrapper(std::coroutine_handle<promise_type> h = nullptr) noexcept : handle(h) {}
-    ~wrapper() noexcept {
+    explicit simple_wrapper(std::coroutine_handle<promise_type> h = nullptr) noexcept : handle(h) {}
+    ~simple_wrapper() noexcept {
         if (handle) {
             handle.destroy();
         }
@@ -141,7 +148,8 @@ struct wrapper {
     }
 };
 
-wrapper generator(int from, int to, int throw_on = -1) {
+template <typename W>
+W generator(int from, int to, int throw_on = -1) {
     dtor_guard dg;
     for (int i = from; i < to; ++i) {
         if (i == throw_on) {
@@ -151,16 +159,18 @@ wrapper generator(int from, int to, int throw_on = -1) {
     }
 }
 
+template <typename W>
 void no_throws() {
-    auto gen = generator(0, 10);
+    auto gen = generator<W>(0, 10);
     for (int i = 0; i < 10; ++i) {
         std::printf("%d ", gen.get());
     }
 }
 
+template <typename W>
 void eager_throw() {
     try {
-        auto gen = generator(0, 10, 0);
+        auto gen = generator<W>(0, 10, 0);
         for (int i = 0; i < 10; ++i) {
             std::printf("%d ", gen.get());
             errors.push_back("no exception thrown");
@@ -174,9 +184,10 @@ void eager_throw() {
     }
 }
 
+template <typename W>
 void post_yield_throw() {
     try {
-        auto gen = generator(0, 10, 5);
+        auto gen = generator<W>(0, 10, 5);
         for (int i = 0; i < 10; ++i) {
             std::printf("%d ", gen.get());
             if (i == 4) {
@@ -193,16 +204,21 @@ void post_yield_throw() {
 
 void run(void(*fn)(), const char* name) {
     error_guard eg;
-    std::printf("%s:\n  Output: ", name);
+    std::printf("  %s:\n    Output: ", name);
     fn();
     std::puts("");
 }
+template <typename W>
+void run_all() {
+    printf("%s:\n", typeid(W).name());
 
-#define RUN(fn) run(fn, #fn)
-
-int main() {
+#define RUN(fn) run(fn<W>, #fn)
     RUN(no_throws);
     RUN(eager_throw);
     RUN(post_yield_throw);
+}
+
+int main() {
+    run_all<simple_wrapper>();
     return 0;
 }
