@@ -84,15 +84,15 @@ struct error_guard {
         allocator::reset();
 
         if (errors.empty()) {
-            std::puts("    PASS");
+            std::puts("    \033[01;32mPASS\033[m");
             return;
         }
 
         for (const auto& err : errors) {
-            std::printf("    ERROR: %s\n", err.c_str());
+            std::printf("    \033[31mERROR: %s\n", err.c_str());
         }
 
-        std::puts("    FAIL");
+        std::puts("    FAIL\033[m");
     }
 };
 
