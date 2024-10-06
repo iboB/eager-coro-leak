@@ -1,7 +1,7 @@
 require 'net/http'
 require 'json'
 
-src = File.read('main.cpp')
+# https://github.com/compiler-explorer/compiler-explorer/blob/main/docs/API.md
 
 if !ARGV[0]
   puts 'Usage: ruby run-on-ce.rb <compiler-id>'
@@ -23,6 +23,7 @@ end
 
 compiler = ARGV[0]
 std = compiler['vcpp'] ? '-std:c++20' : '-std=c++20'
+src = File.read('main.cpp')
 
 data = {
   source: src,
