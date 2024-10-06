@@ -151,14 +151,45 @@ struct simple_wrapper {
     }
 };
 
+struct throwing_eager_coro_promise_type_helper {
+protected:
+    std::exception_ptr m_exception;
+    bool m_has_been_suspended = false;
+    bool m_has_exception_before_first_suspend = false;
+public:
+    void unhandled_exception() {
+        if (m_has_been_suspended) {
+            m_exception = std::current_exception();
+        }
+        else {
+            m_has_exception_before_first_suspend = true;
+            throw;
+        }
+    }
+
+    void on_suspend() noexcept {
+        m_has_been_suspended = true;
+    }
+
+    void rethrow_if_exception() {
+        if (m_exception) {
+            std::rethrow_exception(m_exception);
+        }
+    }
+
+    template <typename PT>
+    static void safe_destroy_handle(const std::coroutine_handle<PT>& h) noexcept {
+        static_assert(std::is_base_of_v<throwing_eager_coro_promise_type_helper, PT>);
+        if (h && !h.promise().m_has_exception_before_first_suspend) {
+            h.destroy();
+        }
+    }
+};
+
 // this is our attempt at having something work, dealing with specific compiler quirks
 struct workaround_wrapper {
-    struct promise_type : public track_alloc {
+    struct promise_type : public throwing_eager_coro_promise_type_helper, public track_alloc {
         int last_yield = no_value;
-
-        std::exception_ptr exception;
-        bool has_been_suspended = false;
-        bool has_exception_before_first_suspend = false;
 
         workaround_wrapper get_return_object() {
             return workaround_wrapper{std::coroutine_handle<promise_type>::from_promise(*this)};
@@ -168,31 +199,19 @@ struct workaround_wrapper {
         std::suspend_always final_suspend() noexcept { return {}; } // preserve the final yield
 
         std::suspend_always yield_value(int v) noexcept {
-            has_been_suspended = true;
             last_yield = v;
+            on_suspend();
             return {};
         }
 
         void return_void() noexcept {}
-
-        void unhandled_exception() {
-            if (has_been_suspended) {
-                exception = std::current_exception();
-            }
-            else {
-                has_exception_before_first_suspend = true;
-                throw;
-            }
-        }
     };
 
     std::coroutine_handle<promise_type> handle = nullptr;
 
     explicit workaround_wrapper(std::coroutine_handle<promise_type> h = nullptr) noexcept : handle(h) {}
     ~workaround_wrapper() noexcept {
-        if (handle && !handle.promise().has_exception_before_first_suspend) {
-            handle.destroy();
-        }
+        throwing_eager_coro_promise_type_helper::safe_destroy_handle(handle);
     }
 
     int get() {
@@ -200,9 +219,7 @@ struct workaround_wrapper {
         if (handle.done()) return handle_done;
         auto ret = handle.promise().last_yield;
         handle.resume();
-        if (handle.promise().exception) {
-            std::rethrow_exception(handle.promise().exception);
-        }
+        handle.promise().rethrow_if_exception();
         return ret;
     }
 };
