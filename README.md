@@ -1,5 +1,7 @@
 # Eager Coroutine Leak
 
+[Blog post with more details](https://ibob.bg/blog/2024/10/06/coro-throw/)
+
 The setup is that we throw an exception from an eager coroutine before its first ever suspension point.
 
 In an ideal world for any synchronous coroutine in its promise type we should be able to simply write:
