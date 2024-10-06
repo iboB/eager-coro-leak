@@ -12,7 +12,7 @@ if !ARGV[0]
   puts 'g133      - x86-64 gcc 13.3'
   puts 'g142      - x86-64 gcc 14.2'
   puts 'gsnapshot - x86-64 gcc (trunk)'
-  puts 'clang1500 - x86-64 clang 16.0.0'
+  puts 'clang1500 - x86-64 clang 15.0.0'
   puts 'clang1600 - x86-64 clang 16.0.0'
   puts 'clang1701 - x86-64 clang 17.0.1'
   puts 'clang1810 - x86-64 clang 18.1.0'

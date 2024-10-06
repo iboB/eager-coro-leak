@@ -115,7 +115,7 @@ struct simple_wrapper {
         int last_yield = no_value;
 
         simple_wrapper get_return_object() {
-            return simple_wrapper{ std::coroutine_handle<promise_type>::from_promise(*this) };
+            return simple_wrapper{std::coroutine_handle<promise_type>::from_promise(*this)};
         }
 
         std::suspend_never initial_suspend() noexcept { return {}; } // eager
@@ -155,16 +155,20 @@ struct simple_wrapper {
 struct workaround_wrapper {
     struct promise_type : public track_alloc {
         int last_yield = no_value;
-        bool thrown = false;
+
+        std::exception_ptr exception;
+        bool has_been_suspended = false;
+        bool has_exception_before_first_suspend = false;
 
         workaround_wrapper get_return_object() {
-            return workaround_wrapper{ std::coroutine_handle<promise_type>::from_promise(*this) };
+            return workaround_wrapper{std::coroutine_handle<promise_type>::from_promise(*this)};
         }
 
         std::suspend_never initial_suspend() noexcept { return {}; } // eager
         std::suspend_always final_suspend() noexcept { return {}; } // preserve the final yield
 
         std::suspend_always yield_value(int v) noexcept {
+            has_been_suspended = true;
             last_yield = v;
             return {};
         }
@@ -172,8 +176,13 @@ struct workaround_wrapper {
         void return_void() noexcept {}
 
         void unhandled_exception() {
-            thrown = true;
-            throw;
+            if (has_been_suspended) {
+                exception = std::current_exception();
+            }
+            else {
+                has_exception_before_first_suspend = true;
+                throw;
+            }
         }
     };
 
@@ -181,7 +190,7 @@ struct workaround_wrapper {
 
     explicit workaround_wrapper(std::coroutine_handle<promise_type> h = nullptr) noexcept : handle(h) {}
     ~workaround_wrapper() noexcept {
-        if (handle && !handle.promise().thrown) {
+        if (handle && !handle.promise().has_exception_before_first_suspend) {
             handle.destroy();
         }
     }
@@ -191,6 +200,9 @@ struct workaround_wrapper {
         if (handle.done()) return handle_done;
         auto ret = handle.promise().last_yield;
         handle.resume();
+        if (handle.promise().exception) {
+            std::rethrow_exception(handle.promise().exception);
+        }
         return ret;
     }
 };
