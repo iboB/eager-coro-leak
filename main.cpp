@@ -151,6 +151,15 @@ struct simple_wrapper {
     }
 };
 
+//#if defined(__GNUC__)
+//#   if defined(__clang__)
+//#       if __clang_major__ > 19
+//#           error "Clang version > 19 is not tested"
+//#       endif
+//#   elif __GNUC__ > 14
+//#       error "GCC version > 14 is not tested"
+//#   endif
+//#endif
 struct throwing_eager_coro_promise_type_helper {
 protected:
     std::exception_ptr m_exception;
